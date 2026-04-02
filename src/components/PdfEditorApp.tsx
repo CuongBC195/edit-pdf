@@ -279,10 +279,13 @@ export default function PdfEditorApp() {
                         selectedTool={selectedTool}
                         fontSize={fontSize}
                         fontColor={fontColor}
+                        currentPage={currentPage}
+                        totalPages={pages.length}
                         onAnnotationAdd={handleAnnotationAdd}
                         onAnnotationSelect={handleAnnotationSelect}
                         onAnnotationChange={handleAnnotationChange}
                         onAnnotationDelete={handleAnnotationDelete}
+                        onPageChange={setCurrentPage}
                     />
                 )}
             </main>

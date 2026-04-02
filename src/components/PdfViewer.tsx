@@ -14,10 +14,13 @@ interface PdfViewerProps {
     selectedTool: Tool;
     fontSize: number;
     fontColor: string;
+    currentPage: number;
+    totalPages: number;
     onAnnotationAdd: (annotation: Annotation) => void;
     onAnnotationSelect: (id: string | null) => void;
     onAnnotationChange: (id: string, updates: Record<string, unknown>) => void;
     onAnnotationDelete: (id: string) => void;
+    onPageChange: (page: number) => void;
 }
 
 export default function PdfViewer({
@@ -27,15 +30,20 @@ export default function PdfViewer({
     selectedTool,
     fontSize,
     fontColor,
+    currentPage,
+    totalPages,
     onAnnotationAdd,
     onAnnotationSelect,
     onAnnotationChange,
     onAnnotationDelete,
+    onPageChange,
 }: PdfViewerProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
     const [stageSize, setStageSize] = useState({ width: page.width, height: page.height });
     const [displayScale, setDisplayScale] = useState(1);
+    const scrollAccumRef = useRef(0);
+    const scrollCooldownRef = useRef(false);
 
     // Load the page background image
     useEffect(() => {
@@ -69,6 +77,36 @@ export default function PdfViewer({
         window.addEventListener('resize', updateSize);
         return () => window.removeEventListener('resize', updateSize);
     }, [page.width, page.height]);
+
+    // Scroll wheel to navigate pages
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+
+        const handleWheel = (e: WheelEvent) => {
+            e.preventDefault();
+
+            if (scrollCooldownRef.current) return;
+
+            scrollAccumRef.current += e.deltaY;
+
+            const THRESHOLD = 120;
+            if (scrollAccumRef.current > THRESHOLD && currentPage < totalPages) {
+                scrollCooldownRef.current = true;
+                scrollAccumRef.current = 0;
+                onPageChange(currentPage + 1);
+                setTimeout(() => { scrollCooldownRef.current = false; }, 600);
+            } else if (scrollAccumRef.current < -THRESHOLD && currentPage > 1) {
+                scrollCooldownRef.current = true;
+                scrollAccumRef.current = 0;
+                onPageChange(currentPage - 1);
+                setTimeout(() => { scrollCooldownRef.current = false; }, 600);
+            }
+        };
+
+        el.addEventListener('wheel', handleWheel, { passive: false });
+        return () => el.removeEventListener('wheel', handleWheel);
+    }, [currentPage, totalPages, onPageChange]);
 
     // Generate unique ID
     const generateId = () => `ann_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
