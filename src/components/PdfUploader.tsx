@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useCallback, useRef, useState } from 'react';
+import { isPdfFile } from '@/utils/pdfMerger';
 
 interface PdfUploaderProps {
-    onFileSelect: (file: File) => void;
+    onFileSelect: (files: File[]) => void;
     isLoading: boolean;
 }
 
@@ -11,17 +12,22 @@ export default function PdfUploader({ onFileSelect, isLoading }: PdfUploaderProp
     const [isDragOver, setIsDragOver] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleFile = useCallback(
-        (file: File) => {
-            if (file.type !== 'application/pdf') {
-                alert('Please upload a PDF file.');
-                return;
+    const handleFiles = useCallback(
+        (files: FileList | File[]) => {
+            const validFiles = Array.from(files).filter((file) => {
+                if (!isPdfFile(file)) {
+                    alert(`Skipped ${file.name}: Please upload a PDF file.`);
+                    return false;
+                }
+                if (file.size > 20 * 1024 * 1024) {
+                    alert(`Skipped ${file.name}: File size must be less than 20MB.`);
+                    return false;
+                }
+                return true;
+            });
+            if (validFiles.length > 0) {
+                onFileSelect(validFiles);
             }
-            if (file.size > 20 * 1024 * 1024) {
-                alert('File size must be less than 20MB.');
-                return;
-            }
-            onFileSelect(file);
         },
         [onFileSelect]
     );
@@ -30,10 +36,11 @@ export default function PdfUploader({ onFileSelect, isLoading }: PdfUploaderProp
         (e: React.DragEvent) => {
             e.preventDefault();
             setIsDragOver(false);
-            const file = e.dataTransfer.files[0];
-            if (file) handleFile(file);
+            if (e.dataTransfer.files.length > 0) {
+                handleFiles(e.dataTransfer.files);
+            }
         },
-        [handleFile]
+        [handleFiles]
     );
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -48,10 +55,11 @@ export default function PdfUploader({ onFileSelect, isLoading }: PdfUploaderProp
 
     const handleInputChange = useCallback(
         (e: React.ChangeEvent<HTMLInputElement>) => {
-            const file = e.target.files?.[0];
-            if (file) handleFile(file);
+            if (e.target.files && e.target.files.length > 0) {
+                handleFiles(e.target.files);
+            }
         },
-        [handleFile]
+        [handleFiles]
     );
 
     return (
@@ -92,15 +100,16 @@ export default function PdfUploader({ onFileSelect, isLoading }: PdfUploaderProp
                                 </svg>
                             </div>
                             <p className="upload-text">
-                                <strong>Drop your PDF here</strong> or click to browse
+                                <strong>Drop your PDF files here</strong> or click to browse
                             </p>
-                            <p className="upload-hint">Supports PDF files up to 20MB</p>
+                            <p className="upload-hint">Supports single or multiple PDF files up to 20MB</p>
                         </>
                     )}
 
                     <input
                         ref={fileInputRef}
                         type="file"
+                        multiple
                         accept=".pdf,application/pdf"
                         onChange={handleInputChange}
                         className="upload-input-hidden"

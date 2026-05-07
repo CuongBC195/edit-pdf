@@ -2,6 +2,7 @@
 
 import React, { useRef } from 'react';
 import type { Tool } from '@/types';
+import { isPdfFile } from '@/utils/pdfMerger';
 
 interface ToolbarProps {
     selectedTool: Tool;
@@ -11,8 +12,12 @@ interface ToolbarProps {
     fontColor: string;
     onFontColorChange: (color: string) => void;
     onImageUpload: (imageData: string, width: number, height: number) => void;
+    onAppendFiles: (files: File[]) => void;
+    isAppending: boolean;
     onExport: () => void;
     isExporting: boolean;
+    onConvertToDocx: () => void;
+    isConverting: boolean;
     currentPage: number;
     totalPages: number;
     onPageChange: (page: number) => void;
@@ -27,14 +32,19 @@ export default function Toolbar({
     fontColor,
     onFontColorChange,
     onImageUpload,
+    onAppendFiles,
+    isAppending,
     onExport,
     isExporting,
+    onConvertToDocx,
+    isConverting,
     currentPage,
     totalPages,
     onPageChange,
     onReset,
 }: ToolbarProps) {
     const imageInputRef = useRef<HTMLInputElement>(null);
+    const appendInputRef = useRef<HTMLInputElement>(null);
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -67,6 +77,28 @@ export default function Toolbar({
             // Small delay to show tool selection, then open file picker
             setTimeout(() => imageInputRef.current?.click(), 100);
         }
+    };
+
+    const handleAppendChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
+
+        const unsupportedFile = files.find((file) => !isPdfFile(file));
+        if (unsupportedFile) {
+            alert(`${unsupportedFile.name} is not supported. Please choose a PDF file.`);
+            e.target.value = '';
+            return;
+        }
+
+        const oversizedFile = files.find((file) => file.size > 20 * 1024 * 1024);
+        if (oversizedFile) {
+            alert(`${oversizedFile.name} is larger than 20MB.`);
+            e.target.value = '';
+            return;
+        }
+
+        onAppendFiles(files);
+        e.target.value = '';
     };
 
     return (
@@ -187,7 +219,7 @@ export default function Toolbar({
                 <button
                     className="toolbar-export-btn"
                     onClick={onExport}
-                    disabled={isExporting}
+                    disabled={isExporting || isAppending}
                 >
                     {isExporting ? (
                         <>
@@ -202,6 +234,51 @@ export default function Toolbar({
                                 <line x1="12" y1="15" x2="12" y2="3" />
                             </svg>
                             Export PDF
+                        </>
+                    )}
+                </button>
+                <button
+                    className="toolbar-export-btn toolbar-export-btn--docx"
+                    onClick={onConvertToDocx}
+                    disabled={isConverting || isAppending}
+                >
+                    {isConverting ? (
+                        <>
+                            <div className="toolbar-export-spinner" />
+                            Converting...
+                        </>
+                    ) : (
+                        <>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <line x1="16" y1="13" x2="8" y2="13" />
+                                <line x1="16" y1="17" x2="8" y2="17" />
+                                <polyline points="10 9 9 9 8 9" />
+                            </svg>
+                            Convert to DOCX
+                        </>
+                    )}
+                </button>
+                <button
+                    className="toolbar-export-btn toolbar-export-btn--append"
+                    onClick={() => appendInputRef.current?.click()}
+                    disabled={isAppending || isExporting || isConverting}
+                >
+                    {isAppending ? (
+                        <>
+                            <div className="toolbar-export-spinner" />
+                            Appending...
+                        </>
+                    ) : (
+                        <>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <line x1="12" y1="11" x2="12" y2="17" />
+                                <line x1="9" y1="14" x2="15" y2="14" />
+                            </svg>
+                            Append file
                         </>
                     )}
                 </button>
@@ -220,6 +297,15 @@ export default function Toolbar({
                 type="file"
                 accept="image/png,image/jpeg,image/jpg"
                 onChange={handleImageChange}
+                className="upload-input-hidden"
+                aria-hidden="true"
+            />
+            <input
+                ref={appendInputRef}
+                type="file"
+                accept=".pdf,application/pdf"
+                multiple
+                onChange={handleAppendChange}
                 className="upload-input-hidden"
                 aria-hidden="true"
             />

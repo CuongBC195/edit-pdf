@@ -661,6 +661,24 @@ body {
   cursor: not-allowed;
 }
 
+.toolbar-export-btn--docx {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}
+
+.toolbar-export-btn--docx:hover:not(:disabled) {
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4);
+}
+
+.toolbar-export-btn--append {
+  background: linear-gradient(135deg, #059669, #0f766e);
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
+}
+
+.toolbar-export-btn--append:hover:not(:disabled) {
+  box-shadow: 0 4px 16px rgba(5, 150, 105, 0.4);
+}
+
 .toolbar-export-spinner {
   width: 16px;
   height: 16px;

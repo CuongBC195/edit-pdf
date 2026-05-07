@@ -7,6 +7,7 @@ import Toolbar from '@/components/Toolbar';
 import PageThumbnails from '@/components/PageThumbnails';
 import { loadPdfPages } from '@/utils/pdfRenderer';
 import { exportPdf } from '@/utils/pdfExporter';
+import { appendPdfFiles, isPdfFile } from '@/utils/pdfMerger';
 import {
     savePdfFile,
     loadSavedPdfFile,
@@ -42,6 +43,8 @@ export default function PdfEditorApp() {
     const [fontColor, setFontColor] = useState('#000000');
     const [isLoading, setIsLoading] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
+    const [isConverting, setIsConverting] = useState(false);
+    const [isAppending, setIsAppending] = useState(false);
     const [isRestoring, setIsRestoring] = useState(true); // Start true to check session
     const fileRef = useRef<File | null>(null);
     const hasRestoredRef = useRef(false);
@@ -103,26 +106,81 @@ export default function PdfEditorApp() {
         });
     }, [currentPage, fontSize, fontColor, isRestoring, file]);
 
-    // Handle PDF file upload
-    const handleFileSelect = useCallback(async (selectedFile: File) => {
+    const handleFileSelect = useCallback(async (selectedFiles: File[]) => {
         setIsLoading(true);
         try {
-            const pdfPages = await loadPdfPages(selectedFile, RENDER_SCALE);
-            setFile(selectedFile);
-            fileRef.current = selectedFile;
+            if (selectedFiles.length === 0) return;
+
+            const pdfFiles = selectedFiles.filter(isPdfFile);
+            if (pdfFiles.length === 0) {
+                throw new Error('Please upload PDF files only.');
+            }
+
+            let finalPdfFile = pdfFiles[0];
+            if (pdfFiles.length > 1) {
+                const mergedPdfBytes = await appendPdfFiles(pdfFiles[0], pdfFiles.slice(1));
+                const mergedName = pdfFiles[0].name.replace(/\.pdf$/i, '') + '_merged.pdf';
+                finalPdfFile = new File([new Uint8Array(mergedPdfBytes)], mergedName, {
+                    type: 'application/pdf',
+                });
+            }
+
+            const pdfPages = await loadPdfPages(finalPdfFile, RENDER_SCALE);
+            setFile(finalPdfFile);
+            fileRef.current = finalPdfFile;
             setPages(pdfPages);
             setCurrentPage(1);
             setAnnotations([]);
             setSelectedAnnotationId(null);
             setSelectedTool('select');
 
-            // Save PDF to IndexedDB for session persistence
-            await savePdfFile(selectedFile);
+            await savePdfFile(finalPdfFile);
         } catch (error) {
-            console.error('Failed to load PDF:', error);
-            alert('Failed to load PDF. Please try another file.');
+            console.error('Failed to load file:', error);
+            alert(
+                error instanceof Error
+                    ? error.message
+                    : 'Failed to load PDF. Please try again.'
+            );
         } finally {
             setIsLoading(false);
+        }
+    }, []);
+
+    const handleAppendFiles = useCallback(async (selectedFiles: File[]) => {
+        if (!fileRef.current || selectedFiles.length === 0) return;
+
+        setIsAppending(true);
+        try {
+            const pdfFiles = selectedFiles.filter(isPdfFile);
+            if (pdfFiles.length === 0) {
+                throw new Error('Please upload PDF files only.');
+            }
+
+            const mergedPdfBytes = await appendPdfFiles(fileRef.current, pdfFiles);
+            const mergedName = fileRef.current.name.replace(/\.pdf$/i, '') + '_merged.pdf';
+            const mergedFile = new File([new Uint8Array(mergedPdfBytes)], mergedName, {
+                type: 'application/pdf',
+            });
+            const pdfPages = await loadPdfPages(mergedFile, RENDER_SCALE);
+
+            setFile(mergedFile);
+            fileRef.current = mergedFile;
+            setPages(pdfPages);
+            setCurrentPage((page) => Math.min(page, pdfPages.length));
+            setSelectedAnnotationId(null);
+            setSelectedTool('select');
+
+            await savePdfFile(mergedFile);
+        } catch (error) {
+            console.error('Failed to append files:', error);
+            alert(
+                error instanceof Error
+                    ? error.message
+                    : 'Failed to append PDF. Please try again.'
+            );
+        } finally {
+            setIsAppending(false);
         }
     }, []);
 
@@ -227,6 +285,46 @@ export default function PdfEditorApp() {
         }
     }, [annotations]);
 
+    // Convert PDF to DOCX via conversion service
+    const handleConvertToDocx = useCallback(async () => {
+        if (!fileRef.current) return;
+        setIsConverting(true);
+
+        try {
+            const formData = new FormData();
+            formData.append('file', fileRef.current, fileRef.current.name);
+
+            const response = await fetch('/api/convert/pdf-to-docx', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({ error: 'Conversion failed' }));
+                throw new Error(err.error || 'Conversion failed');
+            }
+
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileRef.current.name.replace(/\.pdf$/i, '.docx');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (error) {
+            console.error('Convert to DOCX failed:', error);
+            alert(
+                error instanceof Error
+                    ? error.message
+                    : 'Failed to convert PDF to DOCX. Please try again later.'
+            );
+        } finally {
+            setIsConverting(false);
+        }
+    }, []);
+
     // Reset to upload screen and clear saved session
     const handleReset = useCallback(async () => {
         setFile(null);
@@ -300,8 +398,12 @@ export default function PdfEditorApp() {
                     fontColor={fontColor}
                     onFontColorChange={setFontColor}
                     onImageUpload={handleImageUpload}
+                    onAppendFiles={handleAppendFiles}
+                    isAppending={isAppending}
                     onExport={handleExport}
                     isExporting={isExporting}
+                    onConvertToDocx={handleConvertToDocx}
+                    isConverting={isConverting}
                     currentPage={currentPage}
                     totalPages={pages.length}
                     onPageChange={setCurrentPage}
