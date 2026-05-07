@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile, Header
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 
 app = FastAPI(title="PDF to DOCX Conversion Service")
 
@@ -49,8 +49,13 @@ async def pdf_to_docx(
             raise HTTPException(status_code=500, detail="Conversion produced no output")
 
         output_name = file.filename.rsplit(".", 1)[0] + ".docx"
-        return FileResponse(
-            path=str(output_path),
+        safe_docx_name = output_name.encode("ascii", errors="ignore").decode("ascii") or "converted.docx"
+        docx_bytes = output_path.read_bytes()
+
+        return Response(
+            content=docx_bytes,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            filename=output_name,
+            headers={
+                "Content-Disposition": f"attachment; filename=\"{safe_docx_name}\"",
+            },
         )
